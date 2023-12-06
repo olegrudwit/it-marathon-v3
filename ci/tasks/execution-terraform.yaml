@@ -1,0 +1,46 @@
+.terraform-init:
+  before_script:
+    - |
+      echo -e "\n\n\nTerraform init\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        terraform init
+        cd ../../..
+      done < changes/terraform.txt
+
+.terraform-plan:
+  extends: .terraform-init
+  script:
+    - |
+      echo -e "\n\n\nTerraform plan\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        terraform plan
+        cd ../../..
+      done < changes/terraform.txt
+
+.terraform-apply:
+  extends: .terraform-init
+  script:
+    - |
+      echo -e "\n\n\nTerraform plan\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        terraform apply -auto-approve
+        cd ../../..
+      done < changes/terraform.txt
+
+.terraform-destroy:
+  extends: .terraform-init
+  script:
+    - |
+      echo -e "\n\n\nTerraform plan\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        terraform destroy -auto-approve
+        cd ../../..
+      done < changes/terraform.txt

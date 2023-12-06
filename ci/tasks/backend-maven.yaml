@@ -1,0 +1,66 @@
+.maven-build:
+  before_script:
+    - |
+      mvn --version
+      echo -e "\n\n\n Maven package\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        mvn package
+        cd ../..
+      done < changes/backend_java.txt
+
+.maven:
+  extends: .maven-build
+  script:
+    - |
+      apt update -y
+      apt -y install zip
+      cd upamers-java-backend
+      chmod +x package-layer-and-functions.sh
+      ./package-layer-and-functions.sh
+  artifacts:
+    paths:
+      - upamers-java-backend/
+
+.deploy_jar:
+  script:
+    - |
+      LAMBDA_LIST=("GetUserListFunction" "CreateUserFunction" "UpdateUserFunction" "DeleteUserFunction" "GetUserFunction" "GetUserListByQueryFunction")
+      echo -e "\n\n\n Deploy lambda\n\n"
+
+      cd upamers-java-backend/lambda-deployment
+
+      ls -al
+      echo "Upload lambda-common-layer to S3"
+      aws s3 cp lambda-common-layer.zip s3://it-marathon-v3-java-backend-artifacts/layers/lambda-common-layer-$CI_COMMIT_SHORT_SHA.zip
+    
+      echo "Deploy lambda layer"
+      aws lambda publish-layer-version \
+        --layer-name it-marathon-lambda-common-layer \
+        --description "lambda java layer for it marathon" \
+        --content S3Bucket=it-marathon-v3-java-backend-artifacts,S3Key=layers/lambda-common-layer-$CI_COMMIT_SHORT_SHA.zip \
+        --compatible-runtimes java11 > layer-arn.txt
+      
+      cat layer-arn.txt | grep LayerVersionArn | cut -d" " -f6 | cut -d"," -f1 | cut -d"\"" -f2
+      layer_arn=$(cat layer-arn.txt | grep LayerVersionArn | cut -d" " -f6 | cut -d"," -f1 | cut -d"\"" -f2)
+    
+      for specific_lambda_name in ${LAMBDA_LIST[*]} 
+      do  
+         echo "Upload $specific_lambda_name to S3"
+         aws s3 cp function-$specific_lambda_name.zip s3://it-marathon-v3-java-backend-artifacts/$specific_lambda_name/$specific_lambda_name-$CI_COMMIT_SHORT_SHA.zip
+    
+         echo "Deploy to $specific_lambda_name"
+         aws lambda update-function-code \
+          --function-name="it-marathon-v3-$specific_lambda_name-func" \
+          --s3-bucket=it-marathon-v3-java-backend-artifacts \
+          --s3-key=$specific_lambda_name/$specific_lambda_name-$CI_COMMIT_SHORT_SHA.zip
+      
+         sleep 10s
+      
+         aws lambda update-function-configuration \
+            --function-name "it-marathon-v3-$specific_lambda_name-func" \
+            --layers $layer_arn 
+      
+         sleep 10s
+      done

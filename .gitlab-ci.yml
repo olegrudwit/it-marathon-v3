@@ -1,0 +1,65 @@
+stages:
+  - init
+  - pr_job
+  - merge_job
+  - shedule_job
+
+include:
+  - local: 'ci/tasks/*.yaml'
+
+checkout:
+  stage: init
+  extends: .get-changed-files
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == "develop"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always
+
+pr_pipeline:
+  stage: pr_job
+  variables:
+    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+    TERRAFORM_CHANGES: $TERRAFORM_CHANGES
+    BACKEND_JAVA_CHANGES: $BACKEND_JAVA_CHANGES
+    FRONTEND_CHANGES: $FRONTEND_CHANGES
+    BACKEND_DOTNET_CHANGES: $BACKEND_DOTNET_CHANGES
+  trigger:
+    include:
+      - local: 'ci/pr_pipeline.yaml'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+
+merge_pipeline:
+  stage: merge_job
+  variables:
+    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+    TERRAFORM_CHANGES: $TERRAFORM_CHANGES
+    BACKEND_JAVA_CHANGES: $BACKEND_JAVA_CHANGES
+    FRONTEND_CHANGES: $FRONTEND_CHANGES
+    BACKEND_DOTNET_CHANGES: $BACKEND_DOTNET_CHANGES
+  trigger:
+    include:
+      - local: 'ci/merge_pipeline.yaml'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == "develop"'
+      when: always
+
+scheduled_pipeline:
+  stage: shedule_job
+  variables:
+    PARENT_PIPELINE_ID: $CI_PIPELINE_ID
+    TERRAFORM_CHANGES: $TERRAFORM_CHANGES
+    BACKEND_JAVA_CHANGES: $BACKEND_JAVA_CHANGES
+    TERRAFORM_ACTION: $TERRAFORM_ACTION
+    FRONTEND_CHANGES: $FRONTEND_CHANGES
+    BACKEND_DOTNET_CHANGES: $BACKEND_DOTNET_CHANGES
+  trigger:
+    include:
+      - local: 'ci/scheduled_pipeline.yaml'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always

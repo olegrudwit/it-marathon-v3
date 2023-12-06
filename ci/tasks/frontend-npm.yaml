@@ -1,0 +1,34 @@
+.npm-test:
+  before_script:
+    - |
+      npm link @angular/cli
+
+
+.npm:
+  extends: .npm-test
+  script:
+    - |
+      echo -e "\n\n\n Npm build\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        npm install
+        ng build
+        cd ../..
+      done < changes/frontend.txt
+  artifacts:
+    paths:
+      - upamers-frontend/
+
+.deploy_front:
+  script:
+    - |
+      echo -e "\n\n\n Deploy frontend to S3\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir/dist
+        echo "Upload to S3"
+        aws s3 rm s3://it-marathon-v3-frontend --recursive
+        aws s3 cp "social_network/" s3://it-marathon-v3-frontend --recursive
+        cd ../../..
+      done < changes/frontend.txt        

@@ -1,0 +1,72 @@
+.git-clone:
+  before_script:
+    - |
+      apt update -y
+      apt install -y git
+      echo $CI_COMMIT_REF_NAME
+      git clone -b $CI_COMMIT_REF_NAME https://$GH_USERNAME:$GH_TOKEN@git.epam.com/epm-rdua/it-marathon-v3.git
+
+.get-changed-files:
+  extends: .git-clone
+  script:
+    - |
+      mkdir changes
+      touch changes/all-changed-files.txt
+      git diff --cached --name-only HEAD^
+      git diff --cached --name-only HEAD^ -r > changes/all-changed-files.txt
+  after_script:
+    - |
+      if [[ $CI_PIPELINE_SOURCE == "schedule" ]]; then
+          du -ac ./ | grep it-marathon-v3 | grep '.tf' | cut -d'.' -f2,3 | cut -d'/' -f3-5 | grep -v global | grep -v copy-ref-for-new-folders | grep -v tf-custom-module | grep -v upamers-frontend | sort -u > changes/terraform.txt
+          cat changes/terraform.txt
+          echo upamers-java-backend/DynamoDBApp > changes/backend_java.txt
+          echo upamers-frontend > changes/frontend.txt
+          du -ac ./ | grep it-marathon-v3 | grep upamers-dotnet-backend | grep web-sockets | cut -d'.' -f2,3 | cut -d'/' -f3-5 | grep -v Lambdas.sln | sort -u > changes/backend_dotnet.txt
+          sed -i '1d' changes/backend_dotnet.txt
+          cat changes/backend_dotnet.txt
+          echo "Scheduled=true" >> build.env
+      else
+        all_changed_files=$(cat changes/all-changed-files.txt)
+        # Terraform
+        if [[ $all_changed_files == *"terraform"* ]]; then
+          echo "Terraform work dirs"
+          cat changes/all-changed-files.txt | grep terraform | cut -d'/' -f1-3 | grep -v copy-ref-for-new-folders | sort -u
+          cat changes/all-changed-files.txt | grep terraform | cut -d'/' -f1-3 | grep -v copy-ref-for-new-folders | sort -u > changes/terraform.txt
+          echo "TERRAFORM_CHANGES=true" >> build.env
+        else
+          echo "Terraform no changes"
+        fi
+        # Backend java
+        if [[ $all_changed_files == *"upamers-java-backend"* ]]; then
+          echo "Backend java work dirs"
+          cat changes/all-changed-files.txt | grep upamers-java-backend | grep DynamoDBApp | grep -v jars | cut -d'/' -f1-2 | sort -u
+          cat changes/all-changed-files.txt | grep upamers-java-backend | grep DynamoDBApp | grep -v jars | cut -d'/' -f1-2 | sort -u > changes/backend_java.txt
+          echo "BACKEND_JAVA_CHANGES=true" >> build.env
+        else
+          echo "Backend java no changes"
+        fi
+        # Frontend
+        if [[ $all_changed_files == *"upamers-frontend"* ]]; then
+          echo "Backend java work dirs"
+          cat changes/all-changed-files.txt | grep upamers-frontend | cut -d'/' -f1 | sort -u
+          cat changes/all-changed-files.txt | grep upamers-frontend | cut -d'/' -f1 | sort -u > changes/frontend.txt
+          echo "FRONTEND_CHANGES=true" >> build.env
+        else
+          echo "Frontend no changes"
+        fi
+        # Backend dotnet
+        if [[ $all_changed_files == *"upamers-dotnet-backend"* ]]; then
+          echo "Backend dotnet work dirs"
+          cat changes/all-changed-files.txt | grep upamers-dotnet-backend | grep -v create-tables | grep -v Lambdas.sln | cut -d'/' -f1-3 | sort -u
+          cat changes/all-changed-files.txt | grep upamers-dotnet-backend | grep -v create-tables | grep -v Lambdas.sln | cut -d'/' -f1-3 | sort -u > changes/backend_dotnet.txt
+          echo "BACKEND_DOTNET_CHANGES=true" >> build.env
+        else
+          echo "Backend dotnet no changes"
+        fi
+      
+      fi
+  artifacts:
+    paths:
+      - changes/
+    reports:
+      dotenv: build.env

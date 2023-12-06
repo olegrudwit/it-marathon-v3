@@ -1,0 +1,53 @@
+.dotnet-build:
+  before_script:
+    - |
+      echo -e "\n\n\n Dotnet build\n\n"
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir
+        dotnet build .
+        cd ../../..
+      done < changes/backend_dotnet.txt
+
+.dotnet:
+  extends: .dotnet-build
+  script:
+    - |
+      apt update -y
+      apt -y install zip
+      while read dir; do
+        printf "\n${dir}\n"
+        cd $dir/bin/Debug/net6.0
+        zip -r artifact.zip *
+        mv ./artifact.zip ../../../artifact.zip
+        cd ../../../../../..
+      done < changes/backend_dotnet.txt
+  artifacts:
+    paths:
+      - upamers-dotnet-backend/
+
+.deploy_zip:
+  script:
+    - |
+      LAMBDA_LIST=("Connect" "Disconnect" "ReadMessage" "SendMessage" "GetAllChats" "GetMessages" "GetUnreadMessages")
+      echo -e "\n\n\n Deploy lambda\n\n"
+      for specific_lambda_name in ${LAMBDA_LIST[*]} 
+      do  
+        path_to_code=$(cat changes/backend_dotnet.txt | grep $specific_lambda_name)
+        printf "\n${path_to_code}\n"
+        cd $path_to_code
+      
+        echo "Upload $specific_lambda_name to S3"
+        aws s3 cp artifact.zip s3://it-marathon-v3-dotnet-backend-artifacts/$specific_lambda_name/$specific_lambda_name-$CI_COMMIT_SHORT_SHA.zip
+    
+        echo "Deploy to $specific_lambda_name"
+        aws lambda update-function-code \
+          --function-name="it-marathon-v3-$specific_lambda_name-func" \
+          --s3-bucket=it-marathon-v3-dotnet-backend-artifacts \
+          --s3-key=$specific_lambda_name/$specific_lambda_name-$CI_COMMIT_SHORT_SHA.zip
+
+        cd ../../..
+      done
+      
+      
+      
